@@ -4,6 +4,33 @@ This project is a collection of container builds and deployment yaml to run kios
 
 The container builds are done using OpenSUSE's instance of the Open Build Service and can be found at https://build.opensuse.org/project/show/home:atgracey:wallboardos
 
+# This fork as adjustmens for nvidia orin agx usage
+
+- Create a new image for X11 that includes the required xorg.conf for nvidia and has the user-space RPMs installed for nvidia-jetpack
+- Image is build based on SLES 15 SP6 BCI for aarch64
+- Adjusted helm chart values to use this image
+- On the host OS had do some adjustments which might not be required in the future, anymore
+
+echo "options nvidia-drm modeset=0 fbdev=1" > /etc/modprobe.d/50-nvidia-drm.conf
+
+cp /usr/lib/systemd/system/load-nvidia-drm-default.service /etc/systemd/system/
+
+sed -i 's/graphical.target/multi-user.target/g' /etc/systemd/system/load-nvidia-drm-default.service
+
+systemctl daemon-reload
+
+systemctl disable load-nvidia-drm-default.service
+
+systemctl enable load-nvidia-drm-default.service
+
+USB Keyboard works, firefox works
+
+Open ToDo:
+
+- mouse does not work - need to find out how and why
+- need vncviewer similar to firefox as app
+- touch screen support?
+
 # Benefits
 
 Running your kiosk/HID applications this way allows for more explicit security boundaries along with allowing for a wider range of languages/frameworks when building your app.

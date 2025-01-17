@@ -15,7 +15,7 @@ spec:
     spec:
       initContainers:
         - name: x11
-          image: registry.opensuse.org/home/atgracey/wallboardos/15.5/x11:notaskbar
+          image: weiss-2.weiss.ddnss.de:5000/base/x11:0.0.4
           imagePullPolicy: Always
           restartPolicy: Always
           securityContext:
