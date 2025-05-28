@@ -1,0 +1,2 @@
+[registry."weiss-2.weiss.ddnss.de:5000"]
+  ca=["/etc/ssl/ca-bundle.pem"]
