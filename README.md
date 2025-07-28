@@ -125,7 +125,7 @@ Doing both of these will show a blank screen with a flashing cursor in the top-l
 
 ## Turning off key combinations
 
-To disallow closing the application or otherwise tampering with the kiosk, it can be useful to remap or turn of certain keys. This can be done using (xmodmap)[https://linux.die.net/man/1/xmodmap]
+To disallow closing the application or otherwise tampering with the kiosk, it can be useful to remap or turn of certain keys. This can be done using [xmodmap](https://linux.die.net/man/1/xmodmap)
 
 The helm chart allows for customizing this file with a values.yaml that looks like this: 
 
@@ -149,8 +149,130 @@ X11:
     keycode 207 =
 ```
 
+## Adding Hostname Resolution
+
+The helm chart allows for adding additional hostname resolution in case your workload needs to refer to static ip addresses: 
+
+```
+hostAliases:
+- hostnames:
+  - "cockpit.local"
+  ip: "172.16.0.1"
+```
+
+## Connecting with Self Signed Certs
+
+If your UI needs to load from locations that are secured with self-signed certificates, this is complicated by Chromium (and related stacks such as Electron) using it's own trust store for certificates so you need to load a new one in seperately.
+
+To do this, you can build a generic secret with an nssdb files with a script that looks like this:
+
+```
+#!/bin/bash
+export NSSDB=/tmp/cert/nssdb
+
+
+# Create new self-signed cert
+openssl req -x509 -sha256 -days 36500 -keyout mycert.key -out mycert.crt -nodes -subj "/C=US/ST=CA/O=OC/OU=Org/CN=myhost.local" -addext "subjectAltName = DNS:myhost.local"
+
+# Create P12 cert from self-signed
+openssl pkcs12 -export -out mycert.p12 -inkey mycert.key -in mycert.crt -passout pass: -name mycert
+
+# Create NSSDB files 
+mkdir -p $NSSDB
+certutil -d sql:$NSSDB -N --empty-password 
+
+# Import P12 cert to NSSDB and add permissions
+pk12util -d sql:$NSSDB -i mycert.p12 -W ""
+certutil -d sql:$NSSDB -M -n "mycert" -t "TCu,,"
+
+# Create secret from files on disk
+kubectl create secret generic nssdb -n kiosk --from-file=$NSSDB
+```
+
+Then add the following to your helm values:
+
+```
+workload: 
+  nssdbSecretName: nssdb
+```
+
+## Forcing a specific resolution
+
+Most displays will negotiate the best resolution possible but sometimes you may want to force a specific resolution. To achieve this, you can overwrite the script that does the display setup with the xinitrcOverride helm value:
+
+```
+X11:
+  xinitrcOverride: |
+    #!/bin/bash
+    xset -dpms
+    xset s off
+    xset s noblank
+    DISPLAY=:0
+
+    # Don't edit this part
+    [ ! -d "/home/user/xauthority" ] && mkdir -p "/home/user/xauthority"
+    touch /home/user/xauthority/.xauth
+    xauth -i -f /home/user/xauthority/.xauth generate $DISPLAY . trusted timeout 0
+    chown -R user:users /home/user/xauthority
+
+    # Get output name (assumes a single display)
+    OUTPUT=`xrandr |grep "\ connected" | cut -d " " -f1`
+
+    # Set resolution
+    xrandr --output $OUTPUT --mode 1920x1080
+
+    ( [ -f ~/.Xmodmap ] ) && xmodmap ~/.Xmodmap
+
+    exec icewm-session-lite
+```
+
 ## Remote Debugging the browser 
 
 Chromium based browsers (including Firefox and Electron) allow for attaching a remote debugger/developer tools. 
 
 TODO: Test and write up how to expose the port and connect to it. (and likely add flag in helm chart)
+
+
+## Change /dev/shm size
+
+By default, we mount in an in-memory tmpfs to be used by the application. The limit for this volume is set to 256Mi but can be adjusted with the following helm values:
+
+```
+workload:
+  shm:
+    sizeLimit: <the limit you want>
+```
+
+If you don't want or need this volume for your application, you can disable it with:
+
+```
+workload:
+  shm:
+    enabled: false
+```
+
+## Run a VNC server to allow for development in VMs
+
+When doing development work on a GUI application, it may be needed to run inside VMs that wouldn't have a display attached. We can get around this issue by adding a VNC server. Please note that this is not recommended in production environments due to potential security issues.
+
+To add a VNC server, install the helm chart with the following values:
+
+```
+additionalContainers:
+- name: vnc
+  image:
+    repository: registry.opensuse.org/home/atgracey/wallboardos/15.6/vnc
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  ports:
+    - name: vnc
+      targetPort: 5900
+      servicePort: 5900
+  accessDisplay: true
+```
+
+Then, from the computer you want to connect from, run:
+
+`kubectl port-forward 5900:5900 svc/svc-vnc -n kiosk`
+
+You should now be able to connect your VNC client to localhost:5900

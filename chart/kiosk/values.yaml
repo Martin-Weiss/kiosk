@@ -7,42 +7,82 @@ X11:
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag: latest
+  
+  # These each provide different ways to override the keyboard mapping
   keyboardModMap: null
+  customKeyboardLayout: null
 
+  # Allows for adding additional commands prior to startx (such as xrandr)
+  xinitrcOverride: null
+
+  # Allow for setting a custom background image using an existing configmap as the source
+  # The named configmap must be in the same namespace this chart is installed in 
+  customBackgroundConfigMap: null
 
 pulseaudio:
   image:
     repository: registry.opensuse.org/home/atgracey/wallboardos/15.6/pa
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
-    tag: test
+    tag: latest
 
 workload:
+  # Page to load if using firefox as the workload
   url: "https://suse.com"
+  # Additional environment variables to passthrough into the workload
+  env: []
+  # These can be used to provide a custom workload
   image:
     repository: registry.opensuse.org/home/atgracey/wallboardos/15.6/firefox
     pullPolicy: IfNotPresent
-    # Overrides the image tag whose default is the chart appVersion.
     tag: latest
+    
+  # This is used for side-loading a new trust store for chromium based workloads (including electron.js)
+  nssdbSecretName: null
 
+  # These allow for side-loading addtional files into the workload
+  #   Both are a list with each entry having `name` and `mountPath` 
+  #   where `name` is the name of a secret/configmap that exists 
+  #   in the same namespace as this chart
+  #   and mountPath is where the files should be mounted
+  additionalConfigMaps: []
+  additionalSecrets: []
 
-vnc: 
-  enabled: false
-  image:
-    repository: registry.opensuse.org/home/atgracey/wallboardos/15.6/vnc
-    pullPolicy: IfNotPresent
-    # Overrides the image tag whose default is the chart appVersion.
-    tag: "vnc"
-  service:
-    type: ClusterIP
-    port: 80
+  # These allow for adding health checks for the workload
+  # For more information, refer to: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  startupProbe: {}
+  livenessProbe: {}
+
+  # This allows for mounting an tmpfs (i.e. EmptyDir with `medium: Memory`) to /dev/shm for the browser to use
+  shm:
+    enabled: true
+    sizeLimit: 256Mi
+
+# This allows for adding containers to the same pod (such as VNC or testing tools)
+# These can optionally have access to X11 and pulse audio
+additionalContainers: []
+  # - name: vnc
+  #   image:
+  #     repository: registry.opensuse.org/home/atgracey/wallboardos/15.6/vnc
+  #     tag: "vnc"
+  #     pullPolicy: IfNotPresent
+  #     command: []
+  #     args: []
+  #     env: {}
+  #   ports:
+  #     - name: vnc
+  #       targetPort: 5900
+  #       servicePort: 5900
+  #   accessDisplay: true
 
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-
 podLabels: {}
 podAnnotations: {}
 resources: {}
 nodeSelector: {}
+
+# For adding custom hostnames for the workload to use
+hostAliases: []
